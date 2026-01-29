@@ -31,7 +31,7 @@ Criar um runtime onde:
 
 Agentes de IA podem perceber, decidir e agir usando ferramentas reais da máquina do usuário
 
-O PAR é como um “sistema operacional para agentes”.
+O PAR é como um "sistema operacional para agentes".
 
 🧱 PRINCÍPIOS DE ARQUITETURA
 
@@ -83,7 +83,7 @@ Docker e Kubernetes são apenas formas de deploy, não partes da arquitetura
 🏗️ VISÃO DE ALTO NÍVEL
 CLI (par start)
      ↓
-PAR Server (Node.js)
+PAR Server (Node.js com Fastify)
      ↓
 Agent Orchestrator
      ↓
@@ -113,7 +113,7 @@ Futuramente instalar plugins/skills
 
 2️⃣ PAR Server
 
-Servidor HTTP + WebSocket que:
+Servidor HTTP (Fastify) que:
 
 Recebe mensagens
 
@@ -235,7 +235,7 @@ Retorno textual
 
 O agente nunca executa código diretamente, apenas solicita:
 
-“Execute a skill X com esses parâmetros”
+"Execute a skill X com esses parâmetros"
 
 O PAR valida e executa.
 
@@ -305,6 +305,32 @@ Interface local no navegador
 Fase 7 — Integração com Telegram
 
 Canal externo funcionando
+
+📊 STATUS ATUAL
+✅ Fase 0 — CLI + Server básico (COMPLETA)
+- CLI par start funcional
+- Server HTTP em Fastify
+- Endpoint /health retornando { status: "ok" }
+- Logs claros de inicialização
+- Porta configurável via env (padrão: 3000)
+
+✅ Fase 1 — API de mensagens (COMPLETA)
+- Endpoint POST /message funcionando
+- Body parsing automático do Fastify
+- Tratamento de erros (400, 404, 500)
+
+✅ Fase 2 — Interface de Agent Provider (COMPLETA)
+- Interface AgentProvider definida
+- AgentRegistry para registro de agentes
+- Orchestrator para seleção e roteamento
+- FakeAgent e AnotherFakeAgent como implementações
+- Arquitetura plugável sem acoplamento
+
+⏳ Fase 3 — Skill Engine (PENDENTE)
+⏳ Fase 4 — Integração com primeiro LLM real (PENDENTE)
+⏳ Fase 5 — Loop de tools completo (PENDENTE)
+⏳ Fase 6 — Web UI (PENDENTE)
+⏳ Fase 7 — Integração com Telegram (PENDENTE)
 
 🧭 DIRETRIZES PARA O CHATGPT (GERAÇÃO DE CÓDIGO)
 

@@ -1,0 +1,19 @@
+{
+  "name": "@par/cli",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "par": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@par/server": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
