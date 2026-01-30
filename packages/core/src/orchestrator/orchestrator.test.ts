@@ -1,11 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Orchestrator } from './orchestrator';
 import { AgentRegistry } from '../agents/AgentRegistry';
 import type { AgentProvider } from '../agents/AgentProvider';
 import type { AgentInput } from '../agents/types';
+import type { ToolCall, ToolResult } from '../tools/types';
 
 class MockAgent implements AgentProvider {
-  constructor(public id: string, public name: string, private response: string) {}
+  constructor(
+    public id: string,
+    public name: string,
+    private response: string
+  ) {}
 
   async handleMessage(input: AgentInput): Promise<{ response: string }> {
     return { response: this.response };
@@ -120,6 +125,287 @@ describe('Orchestrator', () => {
       await orchestrator.processMessage(input, 'spy');
 
       expect(receivedInput).toEqual(input);
+    });
+  });
+
+  describe('processMessageWithToolLoop', () => {
+    it('should return response directly when agent returns text', async () => {
+      const input: AgentInput = {
+        message: 'Hello',
+        sessionId: 'session-1'
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input);
+
+      expect(output.response).toBe('Response 1');
+      expect(output.toolCall).toBeUndefined();
+    });
+
+    it('should execute tool and continue when agent requests tool call', async () => {
+      const toolCallAgent: AgentProvider = {
+        id: 'tool-agent',
+        name: 'Tool Agent',
+        async handleMessage(input: AgentInput) {
+          if (input.history?.length === 0) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo test' }
+              } as ToolCall
+            };
+          }
+          return { response: 'Final response after tool' };
+        }
+      };
+
+      registry.registerAgent(toolCallAgent);
+
+      const input: AgentInput = {
+        message: 'Execute a command',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'tool-agent');
+
+      expect(output.response).toBe('Final response after tool');
+      expect(output.toolCall).toBeUndefined();
+    });
+
+    it('should return error when tool execution fails', async () => {
+      const failingToolAgent: AgentProvider = {
+        id: 'failing-tool-agent',
+        name: 'Failing Tool Agent',
+        async handleMessage(input: AgentInput) {
+          return {
+            toolCall: {
+              type: 'tool_call',
+              tool: 'execute_command',
+              input: { command: 'rm -rf /' }
+            } as ToolCall
+          };
+        }
+      };
+
+      registry.registerAgent(failingToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute dangerous command',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'failing-tool-agent');
+
+      expect(output.response).toContain('Tool execution failed');
+      expect(output.response).toContain('Dangerous command detected');
+    });
+
+    it('should handle multiple tool calls in sequence', async () => {
+      let callCount = 0;
+      const multiToolAgent: AgentProvider = {
+        id: 'multi-tool-agent',
+        name: 'Multi Tool Agent',
+        async handleMessage(input: AgentInput) {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo first' }
+              } as ToolCall
+            };
+          } else if (callCount === 2) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo second' }
+              } as ToolCall
+            };
+          }
+          return { response: 'All tools executed' };
+        }
+      };
+
+      registry.registerAgent(multiToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute multiple commands',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'multi-tool-agent');
+
+      expect(output.response).toBe('All tools executed');
+      expect(callCount).toBe(3);
+    });
+
+    it('should reach max iterations and return error', async () => {
+      const infiniteToolAgent: AgentProvider = {
+        id: 'infinite-tool-agent',
+        name: 'Infinite Tool Agent',
+        async handleMessage(input: AgentInput) {
+          return {
+            toolCall: {
+              type: 'tool_call',
+              tool: 'execute_command',
+              input: { command: 'echo test' }
+            } as ToolCall
+          };
+        }
+      };
+
+      registry.registerAgent(infiniteToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute forever',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'infinite-tool-agent');
+
+      expect(output.response).toContain('Maximum iterations');
+      expect(output.response).toContain('reached without a response');
+    });
+
+    it('should preserve history across tool calls', async () => {
+      const historyTrackingAgent: AgentProvider = {
+        id: 'history-agent',
+        name: 'History Tracking Agent',
+        async handleMessage(input: AgentInput) {
+          const historyLength = input.history?.length || 0;
+          if (historyLength === 1) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo test' }
+              } as ToolCall
+            };
+          }
+          return {
+            response: `History contains ${historyLength} messages`
+          };
+        }
+      };
+
+      registry.registerAgent(historyTrackingAgent);
+
+      const input: AgentInput = {
+        message: 'Execute with history',
+        sessionId: 'session-1',
+        history: [
+          { role: 'user', content: 'First message', timestamp: 1000 }
+        ],
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'history-agent');
+
+      expect(output.response).toBe('History contains 2 messages');
+    });
+
+    it('should throw error for empty message', async () => {
+      const input: AgentInput = {
+        message: '',
+        sessionId: 'session-1'
+      };
+
+      await expect(orchestrator.processMessageWithToolLoop(input)).rejects.toThrow('Message cannot be empty');
+    });
+
+    it('should throw error when no agent is available', async () => {
+      const emptyRegistry = AgentRegistry.getInstance();
+      emptyRegistry.reset();
+      const emptyOrchestrator = new Orchestrator(emptyRegistry);
+
+      const input: AgentInput = {
+        message: 'Hello',
+        sessionId: 'session-1'
+      };
+
+      await expect(emptyOrchestrator.processMessageWithToolLoop(input)).rejects.toThrow('No agent available');
+    });
+  });
+
+  describe('executeToolCall', () => {
+    it('should execute tool via ToolExecutor', async () => {
+      const toolCall: ToolCall = {
+        type: 'tool_call',
+        tool: 'execute_command',
+        input: { command: 'echo test' }
+      };
+
+      const result = await orchestrator.executeToolCall(toolCall);
+
+      expect(result.tool).toBe('execute_command');
+      expect(result.output).toBeDefined();
+      expect(result.output).toContain('test');
     });
   });
 });

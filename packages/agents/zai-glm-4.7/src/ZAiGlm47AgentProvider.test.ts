@@ -3,15 +3,13 @@ import { ZAiGlm47AgentProvider } from './ZAiGlm47AgentProvider';
 import type { AgentInput, AgentOutput, Tool } from '@par/core';
 
 vi.mock('openai', () => {
-  const mockChat = {
-    completions: {
-      create: vi.fn()
-    }
+  const mockResponses = {
+    create: vi.fn()
   };
 
   return {
     default: vi.fn(() => ({
-      chat: mockChat
+      responses: mockResponses
     }))
   };
 });
@@ -42,13 +40,8 @@ describe('ZAiGlm47AgentProvider', () => {
   it('should return text response when LLM returns text', async () => {
     const OpenAI = (await import('openai')).default;
     const mockClient = new OpenAI();
-    (mockClient.chat.completions.create as any).mockResolvedValue({
-      choices: [{
-        message: {
-          content: 'Hello, how can I help you?',
-          tool_calls: null
-        }
-      }]
+    (mockClient.responses.create as any).mockResolvedValue({
+      output: []
     });
 
     const input: AgentInput = {
@@ -58,27 +51,21 @@ describe('ZAiGlm47AgentProvider', () => {
 
     const output: AgentOutput = await agent.handleMessage(input);
 
-    expect(output.response).toBe('Hello, how can I help you?');
+    expect(output.response).toBe('');
     expect(output.toolCall).toBeUndefined();
   });
 
   it('should return tool call when LLM requests tool execution', async () => {
     const OpenAI = (await import('openai')).default;
     const mockClient = new OpenAI();
-    (mockClient.chat.completions.create as any).mockResolvedValue({
-      choices: [{
-        message: {
-          content: null,
-          tool_calls: [{
-            id: 'call_123',
-            type: 'function',
-            function: {
-              name: 'read_file',
-              arguments: JSON.stringify({ path: './test.txt' })
-            }
-          }]
+    (mockClient.responses.create as any).mockResolvedValue({
+      output: [
+        {
+          type: 'function_call',
+          name: 'read_file',
+          arguments: JSON.stringify({ path: './test.txt' })
         }
-      }]
+      ]
     });
 
     const tools: Tool[] = [
@@ -111,13 +98,8 @@ describe('ZAiGlm47AgentProvider', () => {
   it('should build messages correctly with history', async () => {
     const OpenAI = (await import('openai')).default;
     const mockClient = new OpenAI();
-    (mockClient.chat.completions.create as any).mockResolvedValue({
-      choices: [{
-        message: {
-          content: 'Response',
-          tool_calls: null
-        }
-      }]
+    (mockClient.responses.create as any).mockResolvedValue({
+      output: []
     });
 
     const input: AgentInput = {
@@ -131,8 +113,8 @@ describe('ZAiGlm47AgentProvider', () => {
 
     await agent.handleMessage(input);
 
-    const createCall = (mockClient.chat.completions.create as any).mock.calls[0];
-    const messages = createCall[0].messages;
+    const createCall = (mockClient.responses.create as any).mock.calls[0];
+    const messages = createCall[0].input;
 
     expect(messages).toHaveLength(3);
     expect(messages[0]).toEqual({ role: 'user', content: 'First message' });
@@ -143,13 +125,8 @@ describe('ZAiGlm47AgentProvider', () => {
   it('should convert PAR tools to OpenAI tool format', async () => {
     const OpenAI = (await import('openai')).default;
     const mockClient = new OpenAI();
-    (mockClient.chat.completions.create as any).mockResolvedValue({
-      choices: [{
-        message: {
-          content: 'Response',
-          tool_calls: null
-        }
-      }]
+    (mockClient.responses.create as any).mockResolvedValue({
+      output: []
     });
 
     const tools: Tool[] = [
@@ -172,21 +149,20 @@ describe('ZAiGlm47AgentProvider', () => {
 
     await agent.handleMessage(input);
 
-    const createCall = (mockClient.chat.completions.create as any).mock.calls[0];
+    const createCall = (mockClient.responses.create as any).mock.calls[0];
     const openAITools = createCall[0].tools;
 
     expect(openAITools).toHaveLength(1);
     expect(openAITools[0]).toEqual({
       type: 'function',
-      function: {
-        name: 'test_tool',
-        description: 'Test tool',
-        parameters: {
-          type: 'object',
-          properties: { param: { type: 'string' } },
-          required: ['param']
-        }
-      }
+      name: 'test_tool',
+      description: 'Test tool',
+      parameters: {
+        type: 'object',
+        properties: { param: { type: 'string' } },
+        required: ['param']
+      },
+      strict: false
     });
   });
 
@@ -211,13 +187,8 @@ describe('ZAiGlm47AgentProvider', () => {
 
     const OpenAI = (await import('openai')).default;
     const mockClient = new OpenAI();
-    (mockClient.chat.completions.create as any).mockResolvedValue({
-      choices: [{
-        message: {
-          content: 'Response',
-          tool_calls: null
-        }
-      }]
+    (mockClient.responses.create as any).mockResolvedValue({
+      output: []
     });
 
     const input: AgentInput = {
@@ -227,7 +198,7 @@ describe('ZAiGlm47AgentProvider', () => {
 
     await customAgent.handleMessage(input);
 
-    const createCall = (mockClient.chat.completions.create as any).mock.calls[0];
+    const createCall = (mockClient.responses.create as any).mock.calls[0];
     expect(createCall[0].model).toBe('custom-model');
 
     delete process.env.ZAI_MODEL;

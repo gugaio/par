@@ -43,24 +43,47 @@ export class OpenAIProvider implements AgentProvider {
     return { response: response.output_text || '' };
   }
 
-  private buildMessages(input: AgentInput): OpenAI.Responses.EasyInputMessage[] {
-    const messages: OpenAI.Responses.EasyInputMessage[] = [];
+  private buildMessages(input: AgentInput): OpenAI.Responses.ResponseInputItem[] {
+    const items: OpenAI.Responses.ResponseInputItem[] = [];
 
     if (input.history) {
       for (const msg of input.history) {
-        messages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        });
+        if (msg.toolCall && msg.toolResult) {
+          const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          items.push({
+            type: 'function_call',
+            call_id: callId,
+            name: msg.toolCall.tool,
+            arguments: JSON.stringify(msg.toolCall.input)
+          } as OpenAI.Responses.ResponseFunctionToolCall);
+
+          items.push({
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify({
+              tool: msg.toolResult.tool,
+              output: msg.toolResult.output,
+              error: msg.toolResult.error
+            })
+          } as OpenAI.Responses.ResponseInputItem.FunctionCallOutput);
+        } else if (msg.content) {
+          items.push({
+            type: 'message',
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: [{ type: 'input_text', text: msg.content }]
+          } as OpenAI.Responses.ResponseInputItem.Message);
+        }
       }
     }
 
-    messages.push({
+    items.push({
+      type: 'message',
       role: 'user',
-      content: input.message
-    });
+      content: [{ type: 'input_text', text: input.message }]
+    } as OpenAI.Responses.ResponseInputItem.Message);
 
-    return messages;
+    return items;
   }
 
   private convertToOpenAITools(tools: Tool[]): OpenAI.Responses.FunctionTool[] {

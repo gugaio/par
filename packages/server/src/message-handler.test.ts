@@ -8,7 +8,7 @@ vi.mock('@par/core', async (importOriginal) => {
   return {
     ...actual,
     Orchestrator: class {
-      async processMessage() {
+      async processMessageWithToolLoop() {
         return { response: 'Mock response' };
       }
     }

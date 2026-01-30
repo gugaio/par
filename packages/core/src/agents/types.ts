@@ -1,5 +1,5 @@
 import type { Tool } from '../tools/types';
-import type { ToolCall } from '../tools/types';
+import type { ToolCall, ToolResult } from '../tools/types';
 
 export interface AgentInput {
   message: string;
@@ -17,6 +17,8 @@ export interface Message {
   role: 'user' | 'agent';
   content: string;
   timestamp: number;
+  toolCall?: ToolCall;
+  toolResult?: ToolResult;
 }
 
 export interface AgentOutput {

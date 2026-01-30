@@ -2,32 +2,17 @@ import { Orchestrator } from '@par/core';
 import { AgentRegistry } from '@par/core';
 import type { AgentInput, AgentOutput, SessionContext, Message } from '@par/core';
 import type { Tool } from '@par/core';
-import { FakeAgent } from 'par-agents-fake';
-import { AnotherFakeAgent } from 'par-agents-another';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
 const registry = AgentRegistry.getInstance();
-registry.registerAgent(new FakeAgent());
-registry.registerAgent(new AnotherFakeAgent());
 
 let orchestrator: Orchestrator;
 
 function initializeOrchestrator(): void {
-  try {
-    const { OpenAIProvider } = require('par-agents-openai');
-    registry.registerAgent(new OpenAIProvider());
-    registry.setDefaultAgent('openai');
-    console.log('✅ OpenAI agent registered and set as default');
-  } catch (error) {
-    console.warn('Failed to register OpenAI agent:', error);
-  }
-
-  try {
-    const { ZAiGlm47AgentProvider } = require('par-agents-zai-glm-4.7');
-    registry.registerAgent(new ZAiGlm47AgentProvider());
-  } catch (error) {
-    console.warn('Failed to register Z.ai GLM-4.7 agent:', error);
-  }
+  const { OpenAIProvider } = require('par-agents-openai');
+  registry.registerAgent(new OpenAIProvider());
+  registry.setDefaultAgent('openai');
+  console.log('✅ OpenAI agent registered and set as default');
 
   orchestrator = new Orchestrator(registry);
 }
@@ -100,7 +85,7 @@ export async function messageHandler(req: FastifyRequest<{ Body: MessageRequestB
   }
 
   try {
-    const output: AgentOutput = await orchestrator.processMessage({
+    const output: AgentOutput = await orchestrator.processMessageWithToolLoop({
       message,
       sessionId: sessionId || 'default',
       context,
