@@ -1,8 +1,12 @@
+import type { Tool } from '../tools/types';
+import type { ToolCall } from '../tools/types';
+
 export interface AgentInput {
   message: string;
   sessionId: string;
   context?: SessionContext;
   history?: Message[];
+  tools?: Tool[];
 }
 
 export interface SessionContext {
@@ -16,5 +20,6 @@ export interface Message {
 }
 
 export interface AgentOutput {
-  response: string;
+  response?: string;
+  toolCall?: ToolCall;
 }

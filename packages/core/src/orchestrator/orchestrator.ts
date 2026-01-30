@@ -1,6 +1,7 @@
 import type { AgentInput, AgentOutput } from '../agents/types';
 import type { AgentProvider } from '../agents/AgentProvider';
 import { AgentRegistry } from '../agents/AgentRegistry';
+import type { Tool, ToolCall, ToolResult } from '../tools/types';
 
 export class Orchestrator {
   private registry: AgentRegistry;
@@ -27,5 +28,9 @@ export class Orchestrator {
     }
 
     return agent.handleMessage(input);
+  }
+
+  async executeToolCall(toolCall: ToolCall): Promise<ToolResult> {
+    throw new Error('Tool execution not implemented yet (Phase 3)');
   }
 }

@@ -16,7 +16,7 @@ fastify.setErrorHandler((error, request, reply) => {
 
 export async function start(): Promise<void> {
   try {
-    await fastify.listen({ port: Number(PORT) });
+    await fastify.listen({ port: Number(PORT), host: '0.0.0.0' });
     console.log(`PAR Server running on port ${PORT}`);
     console.log(`Health check available at http://localhost:${PORT}/health`);
     console.log(`Message endpoint available at http://localhost:${PORT}/message`);

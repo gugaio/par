@@ -8,12 +8,18 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@par/server": "*"
+    "@par/server": "*",
+    "dotenv": "^16.4.1",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "@types/dotenv": "^8.2.3",
+    "@types/prompts": "^2.4.9",
+    "vitest": "^1.2.0"
   }
 }

@@ -15,7 +15,7 @@ Manter um servidor sempre ativo
 
 Permitir múltiplos agentes (Claude, Gemini, etc.)
 
-Expor ferramentas locais (skills) para os agentes
+ Expor ferramentas locais (tools) para os agentes
 
 Permitir integração com Web UI, Telegram e outros canais
 
@@ -48,7 +48,7 @@ Modularidade Total
 
 Agentes são plugáveis
 
-Skills são plugáveis
+ Tools são plugáveis
 
 Canais (Telegram, Web, etc.) são adaptadores
 
@@ -56,9 +56,9 @@ Separação de Responsabilidades
 
 Server não sabe como o agente funciona
 
-Agente não sabe como skills são implementadas
+ Agente não sabe como Tool Executors são implementados
 
-Skills não sabem nada sobre LLMs
+ Tool Executors não sabem nada sobre LLMs
 
 LLM é substituível
 
@@ -70,7 +70,7 @@ Tudo é extensível
 
 Novos agentes sem mudar o core
 
-Novas skills sem mudar o core
+ Novas tools sem mudar o core
 
 Novos canais sem mudar o core
 
@@ -89,7 +89,7 @@ Agent Orchestrator
      ↓
 Agents (Claude, Gemini, etc.)
      ↓
-Skill Engine (tools locais)
+ Tool Engine (tools locais)
      ↓
 Sistema Operacional / APIs / Arquivos
 
@@ -109,7 +109,7 @@ Iniciar o servidor
 
 Gerenciar configuração
 
-Futuramente instalar plugins/skills
+ Futuramente instalar tools
 
 2️⃣ PAR Server
 
@@ -157,11 +157,11 @@ Resposta final
 
 Ou pedido de execução de tool
 
-5️⃣ Skill Engine
+ 5️⃣ Tool Engine
 
 Responsável por executar ferramentas reais da máquina.
 
-Exemplos de skills:
+Exemplos de Tool Executors:
 
 Ler arquivo
 
@@ -175,7 +175,11 @@ Rodar testes
 
 Operações de git
 
-Skills são controladas e padronizadas, nunca chamadas diretamente pelo agente.
+Tools são contratos declarativos que descrevem capacidades disponíveis para agentes.
+
+Tool Executors são implementações concretas e controladas de Tools, executadas exclusivamente pelo runtime.
+
+Agentes nunca executam Tool Executors diretamente.
 
 6️⃣ Channels (Adapters)
 
@@ -187,7 +191,47 @@ Telegram
 
 Futuramente WhatsApp, Slack, etc.
 
-Eles não sabem nada sobre agentes — apenas enviam e recebem mensagens do PAR Server.
+ Eles não sabem nada sobre agentes — apenas enviam e recebem mensagens do PAR Server.
+
+📚 GLOSSÁRIO
+
+Tool
+
+Contrato declarativo que descreve uma capacidade disponível para um agente.
+
+Define o nome, descrição, schema de entrada e comportamento esperado.
+
+Tool Executor
+
+Implementação concreta e controlada de uma Tool, executada exclusivamente pelo runtime.
+
+Agentes nunca executam Tool Executors diretamente.
+
+Agent
+
+Entidade de IA que processa mensagens e toma decisões sobre quais Tools usar.
+
+Orchestrator
+
+Componente que seleciona agentes e gerencia o fluxo de mensagens e execução de Tools.
+
+Channel
+
+Adaptador de protocolo que permite comunicação externa (Telegram, Web UI, etc.).
+
+📌 DECISÃO ARQUITETURAL
+
+Nota: o PAR não utiliza o termo "skill" para evitar conflitos semânticos com conceitos de agentes (Claude Code, LangChain, etc.).
+
+O runtime trabalha exclusivamente com Tools (contratos declarativos expostos ao agente) e Tool Executors (implementações controladas executadas pelo runtime).
+
+Essa separação clara garante:
+
+Agentes conhecem apenas a interface Tool (o que pode ser feito)
+
+Runtime controla a execução via Tool Executor (como é feito)
+
+Segurança e isolamento entre camadas
 
 🧠 COMO OS AGENTES DEVEM FUNCIONAR
 
@@ -197,7 +241,7 @@ Não executam comandos diretamente
 
 Não acessam sistema de arquivos diretamente
 
-Só podem agir via tools expostas pelo Skill Engine
+ Só podem agir via tools expostas pelo Tool Engine
 
 Eles funcionam assim:
 
@@ -217,11 +261,11 @@ Continuam raciocínio
 
 Geram resposta final
 
-🧰 COMO AS SKILLS DEVEM FUNCIONAR
+ 🧰 COMO AS TOOLS DEVEM FUNCIONAR
 
-Skills são funções controladas que executam ações no mundo real.
+Tools são contratos declarativos que descrevem capacidades disponíveis para agentes.
 
-Cada skill deve ter:
+Cada Tool deve ter:
 
 Nome
 
@@ -229,15 +273,15 @@ Descrição clara para o agente
 
 Schema de entrada
 
-Execução segura
+Tool Executor correspondente
 
 Retorno textual
 
 O agente nunca executa código diretamente, apenas solicita:
 
-"Execute a skill X com esses parâmetros"
+"Execute a Tool X com esses parâmetros"
 
-O PAR valida e executa.
+O PAR valida e executa através do Tool Executor apropriado.
 
 💬 FLUXO DE EXECUÇÃO DE UMA MENSAGEM
 
@@ -251,7 +295,7 @@ Agente recebe contexto + tools
 
 Agente decide usar uma tool
 
-Skill Engine executa
+ Tool Engine executa (via Tool Executor)
 
 Resultado volta para o agente
 
@@ -286,9 +330,9 @@ Fase 2 — Interface de Agent Provider
 
 Sistema já suporta múltiplos agentes
 
-Fase 3 — Skill Engine
+ Fase 3 — Tool Engine
 
-Execução real de tools locais
+Execução real de tools locais via Tool Executors
 
 Fase 4 — Integração com primeiro LLM real
 
@@ -319,15 +363,25 @@ Canal externo funcionando
 - Body parsing automático do Fastify
 - Tratamento de erros (400, 404, 500)
 
-✅ Fase 2 — Interface de Agent Provider (COMPLETA)
+ ✅ Fase 2 — Interface de Agent Provider (COMPLETA)
 - Interface AgentProvider definida
 - AgentRegistry para registro de agentes
 - Orchestrator para seleção e roteamento
 - FakeAgent e AnotherFakeAgent como implementações
 - Arquitetura plugável sem acoplamento
 
-⏳ Fase 3 — Skill Engine (PENDENTE)
-⏳ Fase 4 — Integração com primeiro LLM real (PENDENTE)
+ ⏳ Fase 3 — Tool Engine (PENDENTE)
+✅ Fase 4 — Integração com Z.ai GLM-4.7 (COMPLETA)
+- Interface Tool definida (contrato declarativo)
+- ToolCall e ToolResult no core
+- ZAiGlm47AgentProvider implementado
+- Integração com API OpenAI-compatible da Z.ai
+- Tool calling: PAR Tools convertidas para formato OpenAI
+- Detecção de tool calls vs respostas de texto
+- Configuração via ZAI_API_KEY, ZAI_BASE_URL, ZAI_MODEL
+- 8 testes para ZAiGlm47AgentProvider
+- Agente fake mantido como fallback
+- Core do PAR independente de LLM
 ⏳ Fase 5 — Loop de tools completo (PENDENTE)
 ⏳ Fase 6 — Web UI (PENDENTE)
 ⏳ Fase 7 — Integração com Telegram (PENDENTE)
@@ -356,7 +410,7 @@ Orchestrator
 
 Agents
 
-Skills
+ Tools
 
 Channels
 
