@@ -1,4 +1,9 @@
+import { config } from 'dotenv';
+
+config();
+
 import Fastify from 'fastify';
+
 import { messageHandler } from './message-handler';
 
 const PORT = process.env.PORT || 3000;

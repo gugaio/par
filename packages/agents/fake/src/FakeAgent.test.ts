@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { FakeAgent } from './FakeAgent';
 import type { AgentInput } from '@par/core';
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { FakeAgent } from './FakeAgent';
 
 describe('FakeAgent', () => {
   let agent: FakeAgent;

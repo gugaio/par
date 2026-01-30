@@ -14,4 +14,6 @@ export interface ToolResult {
   tool: string;
   output?: string;
   error?: string;
+  success: boolean;
+  durationMs: number;
 }

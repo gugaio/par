@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { AgentRegistry } from './AgentRegistry';
+
 import type { AgentProvider } from './AgentProvider';
+import { AgentRegistry } from './AgentRegistry';
 import type { AgentInput, AgentOutput } from './types';
 
 class MockAgent implements AgentProvider {
@@ -37,7 +38,7 @@ describe('AgentRegistry', () => {
     it('should register multiple agents', () => {
       const agent1 = new MockAgent('agent1', 'Agent 1');
       const agent2 = new MockAgent('agent2', 'Agent 2');
-      
+
       registry.registerAgent(agent1);
       registry.registerAgent(agent2);
 
@@ -49,12 +50,12 @@ describe('AgentRegistry', () => {
     it('should not change default agent when registering additional agents', () => {
       const agent1 = new MockAgent('agent1', 'Agent 1');
       const agent2 = new MockAgent('agent2', 'Agent 2');
-      
+
       registry.registerAgent(agent1);
       const firstDefault = registry.getDefaultAgent();
-      
+
       registry.registerAgent(agent2);
-      
+
       expect(registry.getDefaultAgent()).toBe(firstDefault);
     });
   });
@@ -81,7 +82,7 @@ describe('AgentRegistry', () => {
       const agent1 = new MockAgent('agent1', 'Agent 1');
       const agent2 = new MockAgent('agent2', 'Agent 2');
       const agent3 = new MockAgent('agent3', 'Agent 3');
-      
+
       registry.registerAgent(agent1);
       registry.registerAgent(agent2);
       registry.registerAgent(agent3);
@@ -122,11 +123,11 @@ describe('AgentRegistry', () => {
     it('should change default agent', () => {
       const agent1 = new MockAgent('agent1', 'Agent 1');
       const agent2 = new MockAgent('agent2', 'Agent 2');
-      
+
       registry.registerAgent(agent1);
       registry.registerAgent(agent2);
       expect(registry.getDefaultAgent()).toBe(agent1);
-      
+
       registry.setDefaultAgent('agent2');
       expect(registry.getDefaultAgent()).toBe(agent2);
     });

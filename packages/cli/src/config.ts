@@ -1,7 +1,8 @@
-import { join } from 'path';
 import { promises as fs } from 'fs';
-import prompts from 'prompts';
+import { join } from 'path';
+
 import { config } from 'dotenv';
+import prompts from 'prompts';
 
 const ENV_PATH = join(process.cwd(), '.env');
 
@@ -53,7 +54,7 @@ async function cleanEnvFile(): Promise<void> {
     } else {
       await fs.unlink(ENV_PATH);
     }
-  } catch (error) {
+  } catch {
     // Silencioso - se falhar, continua
   }
 }

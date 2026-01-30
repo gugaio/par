@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { ToolExecutor } from './tool-executor';
 
 vi.mock('fs/promises');
@@ -29,6 +30,8 @@ describe('ToolExecutor', () => {
       expect(result.tool).toBe('read_file');
       expect(result.output).toBe('file content');
       expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should execute write_file tool', async () => {
@@ -44,6 +47,8 @@ describe('ToolExecutor', () => {
       expect(result.tool).toBe('write_file');
       expect(result.output).toContain('written successfully');
       expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should return error for unknown tool', async () => {
@@ -55,6 +60,8 @@ describe('ToolExecutor', () => {
 
       expect(result.tool).toBe('unknown_tool');
       expect(result.error).toBe('Unknown tool: unknown_tool');
+      expect(result.success).toBe(false);
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -70,6 +77,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.output).toBe('file content');
+      expect(result.success).toBe(true);
       expect(mockFs.readFile).toHaveBeenCalled();
     });
 
@@ -81,6 +89,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Invalid path: must be a non-empty string');
+      expect(result.success).toBe(false);
     });
 
     it('should return error when read fails', async () => {
@@ -94,6 +103,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('File not found');
+      expect(result.success).toBe(false);
     });
   });
 
@@ -109,6 +119,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.output).toContain('written successfully');
+      expect(result.success).toBe(true);
       expect(mockFs.writeFile).toHaveBeenCalled();
     });
 
@@ -120,6 +131,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Invalid path: must be a non-empty string');
+      expect(result.success).toBe(false);
     });
 
     it('should return error for invalid content', async () => {
@@ -130,6 +142,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Invalid content: must be a string');
+      expect(result.success).toBe(false);
     });
 
     it('should return error when write fails', async () => {
@@ -143,6 +156,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Permission denied');
+      expect(result.success).toBe(false);
     });
   });
 
@@ -155,6 +169,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Invalid command: must be a non-empty string');
+      expect(result.success).toBe(false);
     });
   });
 
@@ -167,6 +182,7 @@ describe('ToolExecutor', () => {
       });
 
       expect(result.error).toBe('Path traversal detected');
+      expect(result.success).toBe(false);
     });
 
     it('should handle tilde expansion', async () => {
@@ -181,12 +197,6 @@ describe('ToolExecutor', () => {
       });
 
       expect(mockFs.readFile).toHaveBeenCalledWith('/home/user/file.txt', 'utf-8');
-    });
-  });
-
-  describe('getMaxIterations', () => {
-    it('should return max iterations constant', () => {
-      expect(ToolExecutor.getMaxIterations()).toBe(10);
     });
   });
 });

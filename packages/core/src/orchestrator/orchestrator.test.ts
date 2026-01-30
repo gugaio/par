@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Orchestrator } from './orchestrator';
-import { AgentRegistry } from '../agents/AgentRegistry';
+
 import type { AgentProvider } from '../agents/AgentProvider';
-import type { AgentInput } from '../agents/types';
+import { AgentRegistry } from '../agents/AgentRegistry';
+import type { AgentInput, Message } from '../agents/types';
 import type { ToolCall, ToolResult } from '../tools/types';
+
+import { Orchestrator } from './orchestrator';
+import type { ExecutionContext, ExecutionPolicy } from './types';
 
 class MockAgent implements AgentProvider {
   constructor(
@@ -34,6 +37,116 @@ describe('Orchestrator', () => {
     registry.registerAgent(mockAgent2);
 
     orchestrator = new Orchestrator(registry);
+  });
+
+  describe('createExecutionContext', () => {
+    it('should create execution context with required fields', () => {
+      const context = (orchestrator as any).createExecutionContext();
+
+      expect(context.executionId).toBeDefined();
+      expect(context.executionId).toMatch(/^exec-\d+-[a-z0-9]{7}$/);
+      expect(context.stepCount).toBe(0);
+      expect(context.toolCallCount).toBe(0);
+      expect(context.toolHistory).toEqual([]);
+      expect(context.startTime).toBeGreaterThan(0);
+      expect(context.endTime).toBeUndefined();
+    });
+
+    it('should generate unique execution ids', () => {
+      const context1 = (orchestrator as any).createExecutionContext();
+      const context2 = (orchestrator as any).createExecutionContext();
+
+      expect(context1.executionId).not.toBe(context2.executionId);
+    });
+  });
+
+  describe('checkExecutionLimits', () => {
+    it('should pass when within limits', () => {
+      const context: ExecutionContext = {
+        executionId: 'test',
+        stepCount: 5,
+        toolCallCount: 3,
+        toolHistory: [],
+        startTime: Date.now()
+      };
+
+      const policy: ExecutionPolicy = {
+        maxSteps: 10,
+        maxToolCalls: 10,
+        timeoutMs: 60000
+      };
+
+      const result = (orchestrator as any).checkExecutionLimits(context, policy);
+
+      expect(result.valid).toBe(true);
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('should fail when max steps reached', () => {
+      const context: ExecutionContext = {
+        executionId: 'test',
+        stepCount: 10,
+        toolCallCount: 5,
+        toolHistory: [],
+        startTime: Date.now()
+      };
+
+      const policy: ExecutionPolicy = {
+        maxSteps: 10,
+        maxToolCalls: 10,
+        timeoutMs: 60000
+      };
+
+      const result = (orchestrator as any).checkExecutionLimits(context, policy);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Maximum steps');
+      expect(result.reason).toContain('10');
+    });
+
+    it('should fail when max tool calls reached', () => {
+      const context: ExecutionContext = {
+        executionId: 'test',
+        stepCount: 5,
+        toolCallCount: 10,
+        toolHistory: [],
+        startTime: Date.now()
+      };
+
+      const policy: ExecutionPolicy = {
+        maxSteps: 10,
+        maxToolCalls: 10,
+        timeoutMs: 60000
+      };
+
+      const result = (orchestrator as any).checkExecutionLimits(context, policy);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Maximum tool calls');
+      expect(result.reason).toContain('10');
+    });
+
+    it('should fail when timeout reached', () => {
+      const context: ExecutionContext = {
+        executionId: 'test',
+        stepCount: 5,
+        toolCallCount: 3,
+        toolHistory: [],
+        startTime: Date.now() - 350000
+      };
+
+      const policy: ExecutionPolicy = {
+        maxSteps: 10,
+        maxToolCalls: 10,
+        timeoutMs: 300000
+      };
+
+      const result = (orchestrator as any).checkExecutionLimits(context, policy);
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Execution timeout');
+      expect(result.reason).toContain('300000ms');
+    });
   });
 
   describe('processMessage', () => {
@@ -142,11 +255,17 @@ describe('Orchestrator', () => {
     });
 
     it('should execute tool and continue when agent requests tool call', async () => {
+      const capturedHistory: Message[] = [];
+
       const toolCallAgent: AgentProvider = {
         id: 'tool-agent',
         name: 'Tool Agent',
         async handleMessage(input: AgentInput) {
-          if (input.history?.length === 0) {
+          if (input.history && input.history.length > 0) {
+            capturedHistory.push(...input.history);
+          }
+
+          if (input.history && input.history.length === 0) {
             return {
               toolCall: {
                 type: 'tool_call',
@@ -183,6 +302,8 @@ describe('Orchestrator', () => {
 
       expect(output.response).toBe('Final response after tool');
       expect(output.toolCall).toBeUndefined();
+      expect(capturedHistory[0].toolResult?.success).toBe(true);
+      expect(capturedHistory[0].toolResult?.durationMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should return error when tool execution fails', async () => {
@@ -317,8 +438,55 @@ describe('Orchestrator', () => {
 
       const output = await orchestrator.processMessageWithToolLoop(input, 'infinite-tool-agent');
 
-      expect(output.response).toContain('Maximum iterations');
-      expect(output.response).toContain('reached without a response');
+      expect(output.response).toContain('Maximum steps');
+      expect(output.response).toContain('10');
+    });
+
+    it('should enforce execution timeout', async () => {
+      const slowToolAgent: AgentProvider = {
+        id: 'slow-tool-agent',
+        name: 'Slow Tool Agent',
+        async handleMessage(input: AgentInput) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return {
+            toolCall: {
+              type: 'tool_call',
+              tool: 'execute_command',
+              input: { command: 'echo test' }
+            } as ToolCall
+          };
+        }
+      };
+
+      registry.registerAgent(slowToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute slowly',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      const originalTimeout = Orchestrator['DEFAULT_EXECUTION_POLICY'].timeoutMs;
+      Orchestrator['DEFAULT_EXECUTION_POLICY'].timeoutMs = 500;
+
+      const output = await orchestrator.processMessageWithToolLoop(input, 'slow-tool-agent');
+
+      Orchestrator['DEFAULT_EXECUTION_POLICY'].timeoutMs = originalTimeout;
+
+      expect(output.response).toContain('Execution timeout');
+      expect(output.response).toContain('500ms');
     });
 
     it('should preserve history across tool calls', async () => {

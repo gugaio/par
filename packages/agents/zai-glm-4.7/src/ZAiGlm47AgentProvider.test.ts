@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ZAiGlm47AgentProvider } from './ZAiGlm47AgentProvider';
 import type { AgentInput, AgentOutput, Tool } from '@par/core';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+import { ZAiGlm47AgentProvider } from './ZAiGlm47AgentProvider';
 
 vi.mock('openai', () => {
   const mockResponses = {

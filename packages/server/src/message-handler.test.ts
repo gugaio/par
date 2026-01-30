@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { messageHandler } from './message-handler';
-import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { AgentInput, AgentOutput, SessionContext, Message } from '@par/core';
+import type { FastifyRequest, FastifyReply } from 'fastify';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+import { messageHandler } from './message-handler';
 
 vi.mock('@par/core', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@par/core')>();

@@ -1,7 +1,7 @@
-import OpenAI from 'openai';
 import type { AgentProvider } from '@par/core';
-import type { AgentInput, AgentOutput, ToolCall } from '@par/core';
+import type { AgentInput, AgentOutput } from '@par/core';
 import type { Tool } from '@par/core';
+import OpenAI from 'openai';
 
 export class ZAiGlm47AgentProvider implements AgentProvider {
   id = 'zai-glm-4.7';

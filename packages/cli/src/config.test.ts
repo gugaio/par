@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { checkAndConfigureApiKey } from './config';
 import * as fs from 'fs/promises';
+
 import prompts from 'prompts';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+import { checkAndConfigureApiKey } from './config';
 
 vi.mock('fs/promises');
 vi.mock('prompts');

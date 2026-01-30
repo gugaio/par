@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
-import { messageHandler } from './message-handler';
 import type { FastifyError } from 'fastify';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+
+import { messageHandler } from './message-handler';
+
 
 describe('Server', () => {
   let server: ReturnType<typeof Fastify>;
@@ -9,7 +11,7 @@ describe('Server', () => {
 
   beforeAll(async () => {
     server = Fastify();
-    
+
     server.get('/health', async () => {
       return { status: 'ok' };
     });

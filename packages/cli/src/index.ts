@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 
-import { config } from 'dotenv';
-config();
-
-import { checkAndConfigureApiKey } from './config';
 import { start } from '@par/server';
+import { config } from 'dotenv';
+
+config();
 
 async function main(): Promise<void> {
   try {
-    await checkAndConfigureApiKey();
     await start();
   } catch (error) {
     console.error('Failed to start PAR server:', error);

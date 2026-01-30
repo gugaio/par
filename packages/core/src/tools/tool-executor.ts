@@ -1,34 +1,49 @@
-import fs from 'fs/promises';
 import { exec } from 'child_process';
-import { promisify } from 'util';
+import fs from 'fs/promises';
 import path from 'path';
+import { promisify } from 'util';
+
 import type { ToolCall, ToolResult } from './types';
 
 const execAsync = promisify(exec);
 
 export class ToolExecutor {
   private static readonly MAX_EXECUTION_TIME = 30000;
-  private static readonly MAX_ITERATIONS = 10;
 
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
     const { tool, input } = toolCall;
+    const startTime = Date.now();
+
+    let result: Omit<ToolResult, 'success' | 'durationMs'>;
 
     switch (tool) {
       case 'read_file':
-        return this.executeReadFile(input);
+        result = await this.executeReadFile(input);
+        break;
       case 'write_file':
-        return this.executeWriteFile(input);
+        result = await this.executeWriteFile(input);
+        break;
       case 'execute_command':
-        return this.executeCommand(input);
+        result = await this.executeCommand(input);
+        break;
       default:
-        return {
+        result = {
           tool,
           error: `Unknown tool: ${tool}`
         };
     }
+
+    const durationMs = Date.now() - startTime;
+    const success = !result.error;
+
+    return {
+      ...result,
+      success,
+      durationMs
+    };
   }
 
-  private async executeReadFile(input: Record<string, unknown>): Promise<ToolResult> {
+  private async executeReadFile(input: Record<string, unknown>): Promise<Omit<ToolResult, 'success' | 'durationMs'>> {
     const path = input.path as string;
 
     if (!path || typeof path !== 'string') {
@@ -53,7 +68,7 @@ export class ToolExecutor {
     }
   }
 
-  private async executeWriteFile(input: Record<string, unknown>): Promise<ToolResult> {
+  private async executeWriteFile(input: Record<string, unknown>): Promise<Omit<ToolResult, 'success' | 'durationMs'>> {
     const path = input.path as string;
     const content = input.content as string;
 
@@ -86,7 +101,7 @@ export class ToolExecutor {
     }
   }
 
-  private async executeCommand(input: Record<string, unknown>): Promise<ToolResult> {
+  private async executeCommand(input: Record<string, unknown>): Promise<Omit<ToolResult, 'success' | 'durationMs'>> {
     const command = input.command as string;
 
     if (!command || typeof command !== 'string') {
@@ -155,9 +170,5 @@ export class ToolExecutor {
     }
 
     return command;
-  }
-
-  static getMaxIterations(): number {
-    return this.MAX_ITERATIONS;
   }
 }
