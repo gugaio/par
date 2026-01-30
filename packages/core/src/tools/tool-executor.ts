@@ -3,6 +3,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
+import type { ExecutionTracer } from '../observability/tracer';
+import type { ExecutionEvent, ToolCallPayload, ToolResultPayload } from '../observability/types';
+
 import type { ToolCall, ToolResult } from './types';
 
 const execAsync = promisify(exec);
@@ -10,9 +13,26 @@ const execAsync = promisify(exec);
 export class ToolExecutor {
   private static readonly MAX_EXECUTION_TIME = 30000;
 
+  private tracer: ExecutionTracer | null;
+
+  constructor(tracer: ExecutionTracer | null = null) {
+    this.tracer = tracer;
+  }
+
   async executeTool(toolCall: ToolCall): Promise<ToolResult> {
     const { tool, input } = toolCall;
     const startTime = Date.now();
+
+    this.emitEvent({
+      executionId: 'unknown',
+      type: 'tool_call',
+      timestamp: startTime,
+      payload: {
+        step: 0,
+        tool,
+        input
+      } as ToolCallPayload
+    });
 
     let result: Omit<ToolResult, 'success' | 'durationMs'>;
 
@@ -36,11 +56,31 @@ export class ToolExecutor {
     const durationMs = Date.now() - startTime;
     const success = !result.error;
 
+    this.emitEvent({
+      executionId: 'unknown',
+      type: 'tool_result',
+      timestamp: Date.now(),
+      payload: {
+        step: 0,
+        tool,
+        success,
+        durationMs,
+        output: result.output,
+        error: result.error
+      } as ToolResultPayload
+    });
+
     return {
       ...result,
       success,
       durationMs
     };
+  }
+
+  private emitEvent(event: ExecutionEvent): void {
+    if (this.tracer) {
+      this.tracer.onEvent(event);
+    }
   }
 
   private async executeReadFile(input: Record<string, unknown>): Promise<Omit<ToolResult, 'success' | 'durationMs'>> {

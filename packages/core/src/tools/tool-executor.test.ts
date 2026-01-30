@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import type { ExecutionTracer } from '../observability/tracer';
+import type { ExecutionEvent } from '../observability/types';
+
 import { ToolExecutor } from './tool-executor';
 
 vi.mock('fs/promises');
@@ -197,6 +200,164 @@ describe('ToolExecutor', () => {
       });
 
       expect(mockFs.readFile).toHaveBeenCalledWith('/home/user/file.txt', 'utf-8');
+    });
+  });
+
+  describe('observability', () => {
+    let mockTracer: ExecutionTracer;
+    let capturedEvents: ExecutionEvent[];
+
+    beforeEach(() => {
+      capturedEvents = [];
+      mockTracer = {
+        onEvent: (event: ExecutionEvent) => {
+          capturedEvents.push(event);
+        }
+      };
+
+      executor = new ToolExecutor(mockTracer);
+      vi.clearAllMocks();
+    });
+
+    it('should emit tool_call event before execution', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockResolvedValue('file content');
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'file.txt' }
+      });
+
+      expect(capturedEvents.length).toBe(2);
+      const callEvent = capturedEvents[0];
+      expect(callEvent.type).toBe('tool_call');
+      const payload = callEvent.payload as any;
+      expect(payload.tool).toBe('read_file');
+      expect(payload.input).toEqual({ path: 'file.txt' });
+      expect(payload.step).toBe(0);
+    });
+
+    it('should emit tool_result event after successful execution', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockResolvedValue('file content');
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'file.txt' }
+      });
+
+      expect(capturedEvents.length).toBe(2);
+      const resultEvent = capturedEvents[1];
+      expect(resultEvent.type).toBe('tool_result');
+      const payload = resultEvent.payload as any;
+      expect(payload.tool).toBe('read_file');
+      expect(payload.success).toBe(true);
+      expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+      expect(payload.output).toBe('file content');
+      expect(payload.error).toBeUndefined();
+    });
+
+    it('should emit tool_result event after failed execution', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockRejectedValue(new Error('File not found'));
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'nonexistent.txt' }
+      });
+
+      expect(capturedEvents.length).toBe(2);
+      const resultEvent = capturedEvents[1];
+      expect(resultEvent.type).toBe('tool_result');
+      const payload = resultEvent.payload as any;
+      expect(payload.tool).toBe('read_file');
+      expect(payload.success).toBe(false);
+      expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+      expect(payload.output).toBeUndefined();
+      expect(payload.error).toBe('File not found');
+    });
+
+    it('should emit events in correct order', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockResolvedValue('content');
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'file.txt' }
+      });
+
+      const eventTypes = capturedEvents.map(e => e.type);
+      expect(eventTypes).toEqual(['tool_call', 'tool_result']);
+    });
+
+    it('should emit events with chronological timestamps', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockResolvedValue('content');
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'file.txt' }
+      });
+
+      expect(capturedEvents[1].timestamp).toBeGreaterThanOrEqual(capturedEvents[0].timestamp);
+    });
+
+    it('should work correctly without tracer', async () => {
+      const noTracerExecutor = new ToolExecutor(null);
+
+      const mockFs = await import('fs/promises');
+      (mockFs.readFile as any).mockResolvedValue('content');
+
+      const result = await noTracerExecutor.executeTool({
+        type: 'tool_call',
+        tool: 'read_file',
+        input: { path: 'file.txt' }
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toBe('content');
+    });
+
+    it('should emit tool_result with correct payload for write_file', async () => {
+      const mockFs = await import('fs/promises');
+      (mockFs.writeFile as any).mockResolvedValue(undefined);
+
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'write_file',
+        input: { path: 'file.txt', content: 'content' }
+      });
+
+      const callEvent = capturedEvents[0];
+      expect((callEvent.payload as any).tool).toBe('write_file');
+
+      const resultEvent = capturedEvents[1];
+      const payload = resultEvent.payload as any;
+      expect(payload.tool).toBe('write_file');
+      expect(payload.success).toBe(true);
+      expect(payload.output).toContain('written successfully');
+    });
+
+    it('should emit tool_result with correct payload for unknown tool', async () => {
+      await executor.executeTool({
+        type: 'tool_call',
+        tool: 'unknown_tool',
+        input: {}
+      });
+
+      const callEvent = capturedEvents[0];
+      expect((callEvent.payload as any).tool).toBe('unknown_tool');
+
+      const resultEvent = capturedEvents[1];
+      const payload = resultEvent.payload as any;
+      expect(payload.tool).toBe('unknown_tool');
+      expect(payload.success).toBe(false);
+      expect(payload.error).toBe('Unknown tool: unknown_tool');
     });
   });
 });

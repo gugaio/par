@@ -5,3 +5,18 @@ export { Orchestrator } from './orchestrator/orchestrator';
 export type { ExecutionContext, ExecutionPolicy, ToolCallRecord } from './orchestrator/types';
 export type { Tool, ToolCall, ToolResult } from './tools/types';
 export { ToolExecutor } from './tools/tool-executor';
+export {
+  ConsoleExecutionTracer
+} from './observability';
+export type {
+  ExecutionEvent,
+  ExecutionEventType,
+  ExecutionTracer,
+  ExecutionStartPayload,
+  ExecutionStepPayload,
+  AgentDecisionPayload,
+  ToolCallPayload,
+  ToolResultPayload,
+  ExecutionErrorPayload,
+  ExecutionEndPayload
+} from './observability';

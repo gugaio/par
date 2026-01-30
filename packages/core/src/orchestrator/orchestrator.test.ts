@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import type { AgentProvider } from '../agents/AgentProvider';
 import { AgentRegistry } from '../agents/AgentRegistry';
 import type { AgentInput, Message } from '../agents/types';
-import type { ToolCall, ToolResult } from '../tools/types';
+
+import type { ExecutionTracer } from '../observability/tracer';
+import type { ExecutionEvent } from '../observability/types';
+
+import type { ToolCall } from '../tools/types';
 
 import { Orchestrator } from './orchestrator';
 import type { ExecutionContext, ExecutionPolicy } from './types';
@@ -574,6 +578,357 @@ describe('Orchestrator', () => {
       expect(result.tool).toBe('execute_command');
       expect(result.output).toBeDefined();
       expect(result.output).toContain('test');
+    });
+  });
+
+  describe('observability', () => {
+    let mockTracer: ExecutionTracer;
+    let capturedEvents: ExecutionEvent[];
+
+    beforeEach(() => {
+      capturedEvents = [];
+      mockTracer = {
+        onEvent: (event: ExecutionEvent) => {
+          capturedEvents.push(event);
+        }
+      };
+
+      orchestrator = new Orchestrator(registry, mockTracer);
+    });
+
+    it('should emit execution_start event', async () => {
+      const input: AgentInput = {
+        message: 'Test message',
+        sessionId: 'session-123'
+      };
+
+      await orchestrator.processMessageWithToolLoop(input);
+
+      expect(capturedEvents.length).toBeGreaterThan(0);
+      const startEvent = capturedEvents[0];
+      expect(startEvent.type).toBe('execution_start');
+      expect(startEvent.executionId).toBeDefined();
+      expect(startEvent.timestamp).toBeGreaterThan(0);
+      const payload = startEvent.payload as any;
+      expect(payload.sessionId).toBe('session-123');
+      expect(payload.message).toBe('Test message');
+      expect(payload.policy).toBeDefined();
+    });
+
+    it('should emit execution_step for each iteration', async () => {
+      const stepCountAgent: AgentProvider = {
+        id: 'step-agent',
+        name: 'Step Agent',
+        async handleMessage(input: AgentInput) {
+          const stepCount = input.history?.length || 0;
+          if (stepCount === 0) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo test' }
+              } as ToolCall
+            };
+          }
+          return { response: 'Done' };
+        }
+      };
+
+      registry.registerAgent(stepCountAgent);
+
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      await orchestrator.processMessageWithToolLoop(input, 'step-agent');
+
+      const stepEvents = capturedEvents.filter(e => e.type === 'execution_step');
+      expect(stepEvents.length).toBe(2);
+      expect(stepEvents[0].payload as any).toHaveProperty('step', 1);
+      expect(stepEvents[1].payload as any).toHaveProperty('step', 2);
+    });
+
+    it('should emit agent_decision event with response', async () => {
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1'
+      };
+
+      await orchestrator.processMessageWithToolLoop(input);
+
+      const decisionEvents = capturedEvents.filter(e => e.type === 'agent_decision');
+      expect(decisionEvents.length).toBe(1);
+      const decisionEvent = decisionEvents[0];
+      const payload = decisionEvent.payload as any;
+      expect(payload.decision).toBe('response');
+      expect(payload.response).toBe('Response 1');
+      expect(payload.agentId).toBe('agent1');
+    });
+
+    it('should emit agent_decision event with tool_call', async () => {
+      const toolCallAgent: AgentProvider = {
+        id: 'tool-agent',
+        name: 'Tool Agent',
+        async handleMessage(input: AgentInput) {
+          if (input.history && input.history.length === 0) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo test' }
+              } as ToolCall
+            };
+          }
+          return { response: 'Done' };
+        }
+      };
+
+      registry.registerAgent(toolCallAgent);
+
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      await orchestrator.processMessageWithToolLoop(input, 'tool-agent');
+
+      const decisionEvents = capturedEvents.filter(e => e.type === 'agent_decision');
+      expect(decisionEvents.length).toBe(2);
+      const payload = decisionEvents[0].payload as any;
+      expect(payload.decision).toBe('tool_call');
+      expect(payload.toolCall).toBeDefined();
+      expect(payload.toolCall.tool).toBe('execute_command');
+    });
+
+    it('should emit execution_end with completed reason', async () => {
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1'
+      };
+
+      await orchestrator.processMessageWithToolLoop(input);
+
+      const endEvents = capturedEvents.filter(e => e.type === 'execution_end');
+      expect(endEvents.length).toBe(1);
+      const endEvent = endEvents[0];
+      const payload = endEvent.payload as any;
+      expect(payload.reason).toBe('completed');
+      expect(payload.totalSteps).toBe(1);
+      expect(payload.totalToolCalls).toBe(0);
+      expect(payload.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should emit execution_end with limit_reached reason', async () => {
+      const infiniteToolAgent: AgentProvider = {
+        id: 'infinite-tool-agent',
+        name: 'Infinite Tool Agent',
+        async handleMessage(input: AgentInput) {
+          return {
+            toolCall: {
+              type: 'tool_call',
+              tool: 'execute_command',
+              input: { command: 'echo test' }
+            } as ToolCall
+          };
+        }
+      };
+
+      registry.registerAgent(infiniteToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute forever',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      await orchestrator.processMessageWithToolLoop(input, 'infinite-tool-agent');
+
+      const endEvents = capturedEvents.filter(e => e.type === 'execution_end');
+      expect(endEvents.length).toBe(1);
+      const payload = endEvents[0].payload as any;
+      expect(payload.reason).toBe('limit_reached');
+      expect(payload.totalSteps).toBe(10);
+    });
+
+    it('should emit execution_error and execution_end with error reason on tool failure', async () => {
+      const failingToolAgent: AgentProvider = {
+        id: 'failing-tool-agent',
+        name: 'Failing Tool Agent',
+        async handleMessage(input: AgentInput) {
+          return {
+            toolCall: {
+              type: 'tool_call',
+              tool: 'execute_command',
+              input: { command: 'rm -rf /' }
+            } as ToolCall
+          };
+        }
+      };
+
+      registry.registerAgent(failingToolAgent);
+
+      const input: AgentInput = {
+        message: 'Execute dangerous command',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      await orchestrator.processMessageWithToolLoop(input, 'failing-tool-agent');
+
+      const errorEvents = capturedEvents.filter(e => e.type === 'execution_error');
+      expect(errorEvents.length).toBe(1);
+      const errorPayload = errorEvents[0].payload as any;
+      expect(errorPayload.reason).toContain('Tool execution failed');
+
+      const endEvents = capturedEvents.filter(e => e.type === 'execution_end');
+      expect(endEvents.length).toBe(1);
+      const endPayload = endEvents[0].payload as any;
+      expect(endPayload.reason).toBe('error');
+    });
+
+    it('should emit all events in correct order for complete execution', async () => {
+      const toolCallAgent: AgentProvider = {
+        id: 'tool-agent',
+        name: 'Tool Agent',
+        async handleMessage(input: AgentInput) {
+          if (input.history && input.history.length === 0) {
+            return {
+              toolCall: {
+                type: 'tool_call',
+                tool: 'execute_command',
+                input: { command: 'echo test' }
+              } as ToolCall
+            };
+          }
+          return { response: 'Done' };
+        }
+      };
+
+      registry.registerAgent(toolCallAgent);
+
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1',
+        tools: [
+          {
+            name: 'execute_command',
+            description: 'Execute command',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: { type: 'string' }
+              },
+              required: ['command']
+            }
+          }
+        ]
+      };
+
+      await orchestrator.processMessageWithToolLoop(input, 'tool-agent');
+
+      const eventTypes = capturedEvents.map(e => e.type);
+      expect(eventTypes).toEqual([
+        'execution_start',
+        'execution_step',
+        'agent_decision',
+        'tool_call',
+        'tool_result',
+        'execution_step',
+        'agent_decision',
+        'execution_end'
+      ]);
+    });
+
+    it('should work correctly without tracer', async () => {
+      const noTracerOrchestrator = new Orchestrator(registry, null);
+
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1'
+      };
+
+      const output = await noTracerOrchestrator.processMessageWithToolLoop(input);
+
+      expect(output.response).toBe('Response 1');
+    });
+
+    it('should have consistent executionId across all events', async () => {
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1'
+      };
+
+      await orchestrator.processMessageWithToolLoop(input);
+
+      const executionIds = new Set(capturedEvents.map(e => e.executionId));
+      expect(executionIds.size).toBe(1);
+      const executionId = [...executionIds][0];
+      expect(executionId).toMatch(/^exec-\d+-[a-z0-9]{7}$/);
+    });
+
+    it('should have chronological timestamps', async () => {
+      const input: AgentInput = {
+        message: 'Test',
+        sessionId: 'session-1'
+      };
+
+      await orchestrator.processMessageWithToolLoop(input);
+
+      const timestamps = capturedEvents.map(e => e.timestamp);
+      for (let i = 1; i < timestamps.length; i++) {
+        expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
+      }
     });
   });
 });
