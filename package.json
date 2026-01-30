@@ -19,7 +19,11 @@
     "@types/dotenv": "^6.1.1",
     "@types/node": "^20.10.6",
     "@types/prompts": "^2.4.9",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "@vitest/coverage-v8": "^1.2.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-import": "^2.32.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0"
   },
