@@ -1,0 +1,13 @@
+{
+  "name": "@par/ui",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "rm -rf dist/client && node scripts/build-ui.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

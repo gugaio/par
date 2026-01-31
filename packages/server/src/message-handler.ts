@@ -1,9 +1,9 @@
 import { Orchestrator } from '@par/core';
 import { AgentRegistry } from '@par/core';
-import { ConsoleExecutionTracer } from '@par/core';
 import type { AgentOutput, SessionContext, Message } from '@par/core';
 import type { Tool } from '@par/core';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { getTracer } from './tracers/in-memory-tracer';
 
 const registry = AgentRegistry.getInstance();
 
@@ -48,12 +48,8 @@ function initializeOrchestrator(): void {
     }
   }
 
-  const tracingEnabled = process.env.ENABLE_TRACING === 'true';
-  const tracer = tracingEnabled ? new ConsoleExecutionTracer() : null;
-
-  if (tracingEnabled) {
-    console.log('✅ Tracing enabled - execution events will be logged');
-  }
+  const tracer = getTracer();
+  console.log('✅ In-memory tracing enabled - execution events will be stored');
 
   orchestrator = new Orchestrator(registry, tracer);
 }

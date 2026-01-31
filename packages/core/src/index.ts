@@ -6,7 +6,8 @@ export type { ExecutionContext, ExecutionPolicy, ToolCallRecord } from './orches
 export type { Tool, ToolCall, ToolResult } from './tools/types';
 export { ToolExecutor } from './tools/tool-executor';
 export {
-  ConsoleExecutionTracer
+  ConsoleExecutionTracer,
+  InMemoryExecutionTracer
 } from './observability';
 export type {
   ExecutionEvent,
@@ -18,5 +19,7 @@ export type {
   ToolCallPayload,
   ToolResultPayload,
   ExecutionErrorPayload,
-  ExecutionEndPayload
+  ExecutionEndPayload,
+  ExecutionSummary,
+  ExecutionDetail
 } from './observability';
